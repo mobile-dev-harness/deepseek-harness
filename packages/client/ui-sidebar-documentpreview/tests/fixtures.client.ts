@@ -154,7 +154,7 @@ export function harness(script: Record<number, RemoteResult<WorkspaceFileText>> 
   const props = (navigation: { params?: unknown; revision: number } = { revision: 1 }) => ({
     useTabInfo: () => ({
       sidebar: { expanded: true, fullscreen: false },
-      panel: { id: 'pane-1' },
+      panel: { id: 'pane-1', isSoleDockedPane: true },
       tab: {
         id: tabId, kind: 'text', contentId: ADDRESS, title: 'notes.md', visible: true,
         navigation: { address: ADDRESS, params: navigation.params, revision: navigation.revision },

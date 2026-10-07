@@ -24,6 +24,18 @@ export interface PanelInfo {
 /** The layout store's bound action set (framework-baked, draft params peeled). */
 export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>
 
+/** Temporary content width suggestion; superseded or manually overridden requests stay inactive. */
+export interface RightbarWidthRequest {
+  /**
+   * Update this suggestion while it remains current.
+   * @param width - finite preferred normal right panel width in pixels, subject to frame limits.
+   * @throws RangeError for a non-finite width while current; inactive handles remain no-ops.
+   */
+  update(width: number): void
+  /** Release this suggestion if current, restoring the saved user width. */
+  dispose(): void
+}
+
 /** Panel navigation and geometry actions exposed through ctx.layout. */
 export interface ILayout {
   /** Selected central panel from the same root store used by `usePanelInfo`. */
@@ -42,6 +54,14 @@ export interface ILayout {
   /** Toggle the sidebar panel (closed ⟷ contract default width). */
   toggleSidebar(): void
   /**
+   * Suggest a normal right panel width without changing the saved user width.
+   * The latest request wins; manual resizing invalidates it until a new request.
+   * @param width - finite preferred width in pixels, subject to the frame's existing limits.
+   * @returns an update/dispose handle; the caller releases it when its content no longer owns the width.
+   * @throws RangeError for a non-finite width, preserving the current request and saved user width.
+   */
+  requestRightbarWidth(width: number): RightbarWidthRequest
+  /**
    * Report the right panel's presentation without changing its expanded state.
    * @param track - whether the normal panel width reserves a grid track,
    *   including beneath a fullscreen overlay.
@@ -56,6 +76,7 @@ export interface ILayout {
 /** Cross-plugin panel-action face (ctx.layout). */
 export class LayoutController implements ILayout {
   private navigation = new AbortController()
+  private nextWidthRequestId = 0
 
   /**
    * @param panels - actions of the instance shared with the root entry.
@@ -84,14 +105,26 @@ export class LayoutController implements ILayout {
     return this.navigation.signal
   }
 
-  /** Invalidate pending navigations when the layout owner is unloaded. */
+  /** Invalidate pending navigations and width requests when the layout owner is unloaded. */
   dispose(): void {
     this.navigation.abort()
+    this.panels.releaseRightbarWidth()
   }
 
   /** Toggle the sidebar panel (closed ⟷ contract default width). */
   toggleSidebar(): void {
     this.panels.toggleSidebar()
+  }
+
+  /** Request a temporary content width under the frame's normal limits. */
+  requestRightbarWidth(width: number): RightbarWidthRequest {
+    if (!Number.isFinite(width)) throw new RangeError('layout.requestRightbarWidth: width must be finite')
+    const id = ++this.nextWidthRequestId
+    this.panels.requestRightbarWidth(id, width)
+    return {
+      update: (nextWidth) => { this.panels.updateRightbarWidth(id, nextWidth) },
+      dispose: () => { this.panels.releaseRightbarWidth(id) },
+    }
   }
 
   /** Report the right panel's track and fullscreen presentation. */

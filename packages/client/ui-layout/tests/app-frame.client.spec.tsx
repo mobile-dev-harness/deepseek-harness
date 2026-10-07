@@ -8,6 +8,7 @@ import { AppFrame } from '../src/client/AppFrame.tsx'
 import type { AppFrameProps } from '../src/client/AppFrame.tsx'
 import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
 import { createLayoutStore } from '../src/client/stores.ts'
+import { LayoutController } from '../src/client/service.ts'
 import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
@@ -290,6 +291,33 @@ describe('AppFrame', () => {
 })
 
 describe('AppFrame normal width concessions', () => {
+  it('applies temporary content widths under existing limits and restores the saved width', () => {
+    const { frame, instance, rightOwner } = mountFrame()
+    const layout = new LayoutController(instance.actions, () => true, {
+      getSnapshot: () => instance.getSnapshot().panelInfo,
+      subscribe: listener => instance.subscribe(listener),
+    })
+    act(() => { instance.actions.setRightbar(600); instance.actions.openRightbar(true, false) })
+    let request!: ReturnType<LayoutController['requestRightbarWidth']>
+    act(() => { request = layout.requestRightbarWidth(0) })
+    expect(rightOwner().width).toBe(300)
+    expect(tracks(frame)).toEqual([280, 300])
+    act(() => { request.update(9999) })
+    expect(tracks(frame)).toEqual([280, 1344])
+    expect(rightOwner().width).toBe(1240)
+    resize(800)
+    expect(tracks(frame)).toEqual([56, 560])
+    expect(rightOwner().width).toBe(344)
+    resize(755)
+    expect(rightOwner()).toEqual({ width: 0, viewportWidth: 755, canShow: false })
+    expect(tracks(frame)).toEqual([56, 0])
+    expect(instance.getSnapshot().layoutInfo.rightbar).toBe(600)
+    resize(1920)
+    act(() => { request.dispose() })
+    expect(rightOwner().width).toBe(600)
+    expect(tracks(frame)).toEqual([280, 600])
+  })
+
   it('measures the frame, not the window, before choosing the first-open preference', () => {
     frameWidth = 1000
     const { instance, rightOwner } = mountFrame(1920)
@@ -528,6 +556,22 @@ describe('AppFrame right panel presentation', () => {
 })
 
 describe('AppFrame pointer resizing', () => {
+  it('takes over a content width when dragging and ignores late content measurements', () => {
+    const { frame, instance, rightOwner } = mountFrame()
+    const layout = new LayoutController(instance.actions, () => true, {
+      getSnapshot: () => instance.getSnapshot().panelInfo,
+      subscribe: listener => instance.subscribe(listener),
+    })
+    act(() => { instance.actions.openRightbar(true, false) })
+    let request!: ReturnType<LayoutController['requestRightbarWidth']>
+    act(() => { request = layout.requestRightbarWidth(340) })
+    drag(handleFor(frame, 'rightbar'), 1580, 1500)
+    expect(instance.getSnapshot().layoutInfo.rightbar).toBe(420)
+    act(() => { request.update(350); request.dispose() })
+    expect(rightOwner().width).toBe(420)
+    expect(tracks(frame)).toEqual([280, 420])
+  })
+
   it('updates columns during the gesture and freezes the drag-start width', () => {
     const { frame, instance } = mountFrame()
     const handle = handleFor(frame, 'sidebar')
