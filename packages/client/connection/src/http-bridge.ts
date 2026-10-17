@@ -22,12 +22,15 @@ interface BridgeServerResponse {
   once(event: 'close' | 'drain', listener: () => void): this
   writeHead(statusCode: number, headers?: Record<string, string>): unknown
   write(chunk: Uint8Array): boolean
+  /** Emits output a compressing middleware is still holding; absent without one. */
+  flush?(): void
   end(): unknown
 }
 
 /**
  * Bridge one node:http request to the fetch-shaped handler (client close
- * aborts; response writes respect backpressure and stop on disconnect).
+ * aborts; response writes respect backpressure, are flushed through response
+ * compression chunk by chunk, and stop on disconnect).
  * @param req - incoming node:http request.
  * @param res - node:http response the bridge writes and owns to completion.
  * @param apiHandler - fetch-shaped API carrier the request is dispatched to.
@@ -107,10 +110,13 @@ export async function bridge(
     // Drain without writing after disconnect: cancelling Node multipart bodies
     // can race their producer and reject with ERR_INVALID_STATE.
     if (abort.signal.aborted) continue
+    const accepted = res.write(chunk)
+    // Compression otherwise holds a streamed body until its buffers fill.
+    res.flush?.()
     // Backpressure: a false return means the socket buffer is full — wait for drain
     // instead of buffering unboundedly (slow or suspended consumers). 'close' also
     // resolves so a mid-wait disconnect cannot park this loop forever.
-    if (!res.write(chunk) && !res.destroyed) {
+    if (!accepted && !res.destroyed) {
       await new Promise<void>((resolve) => {
         const done = (): void => {
           res.off('drain', done)
