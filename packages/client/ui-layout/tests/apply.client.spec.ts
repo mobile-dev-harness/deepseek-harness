@@ -120,8 +120,13 @@ describe('ui-layout client apply', () => {
     expect(() => { layout.selectPanel(panelId) }).toThrow('main panel "panel-a" is not registered')
     expect(instance.getSnapshot().layoutInfo.sidebar).toBe(0)
     const pending = layout.beginNavigation()
+    const widthRequest = layout.requestRightbarWidth(350)
+    expect(instance.getSnapshot().layoutInfo.rightbarWidthRequest?.width).toBe(350)
     await fiber.dispose()
     expect(pending.aborted).toBe(true)
+    expect(instance.getSnapshot().layoutInfo.rightbarWidthRequest).toBeNull()
+    widthRequest.update(400)
+    expect(instance.getSnapshot().layoutInfo.rightbarWidthRequest).toBeNull()
   })
 
   it('theme presenter applies the initial snapshot, follows theme/change, and unwinds on dispose', async () => {

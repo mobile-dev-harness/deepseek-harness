@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Tab information refuses readers whose committed record and navigation binding disagree. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { keyedObservableHook } from '@deepseek-ai/dsh-client-ui-renderer/src/client/bindings.tsx'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -74,6 +74,26 @@ function expectUncommitted(useTabInfo: UseSidebarRightTabInfo, tabId: TabId): vo
 }
 
 describe('tabInfoFactory committed-record relation', () => {
+  it('derives sole docked pane status while splitting, undoing, floating, and docking', () => {
+    const h = harness()
+    const tabId = h.open()
+    const view = renderHook(h.bind(tabId))
+    const originalPaneId = view.result.current.panel.id
+    expect(view.result.current.panel.isSoleDockedPane).toBe(true)
+
+    act(() => { h.instance.actions.splitPane(SESSION, originalPaneId); h.sync() })
+    expect(view.result.current.panel).toEqual({ id: originalPaneId, isSoleDockedPane: false })
+    act(() => { h.instance.actions.undo(SESSION); h.sync() })
+    expect(view.result.current.panel.isSoleDockedPane).toBe(true)
+
+    act(() => { h.instance.actions.floatTab(SESSION, tabId); h.sync() })
+    const floatingPaneId = view.result.current.panel.id
+    expect(floatingPaneId).not.toBe(originalPaneId)
+    expect(view.result.current.panel.isSoleDockedPane).toBe(false)
+    act(() => { h.instance.actions.unfloatPane(SESSION, floatingPaneId); h.sync() })
+    expect(view.result.current.panel).toEqual({ id: originalPaneId, isSoleDockedPane: true })
+  })
+
   it('rejects a navigation before the first layout commit and reads the same record after commit', () => {
     const h = harness()
     const tabId = h.open((opened) => {

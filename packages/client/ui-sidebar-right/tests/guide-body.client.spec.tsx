@@ -66,7 +66,7 @@ function mountGuide(entries: readonly SidebarRightGuideBox[], custom?: (key: str
   const props: GuideBodyProps = {
     ...standard, SessionProvider: ({ children }) => children,
     useShortcuts: <T,>(selector: (entries: readonly ShortcutCatalogEntry[]) => T): T => selector(shortcuts),
-    useTabInfo: () => ({ sidebar: { expanded: true, fullscreen: false }, panel: { id: 'pane-guide' as PaneId },
+    useTabInfo: () => ({ sidebar: { expanded: true, fullscreen: false }, panel: { id: 'pane-guide' as PaneId, isSoleDockedPane: true },
       tab: { ...TAB, visible: true, signal: new AbortController().signal,
         navigation: { address: TAB.contentId, params: undefined, revision: 0 },
         actions: { bindCommands: vi.fn(() => vi.fn()), openResource: vi.fn(), openTab, close: vi.fn() } } }),

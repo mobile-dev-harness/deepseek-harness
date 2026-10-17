@@ -31,6 +31,8 @@ type LayoutInfo = {
    * the frame and closing the panel preserve this preference.
    */
   rightbar: number | null
+  /** Latest content suggestion; never replaces the saved user preference. */
+  rightbarWidthRequest: { id: number; width: number } | null
   /**
    * Whether the right panel is drawn at all, in either presentation.
    *
@@ -62,6 +64,9 @@ type LayoutActions = {
   toggleSidebar: (draft: LayoutState) => void
   setViewportWidth: (draft: LayoutState, width: number) => void
   setRightbar: (draft: LayoutState, px: number) => void
+  requestRightbarWidth: (draft: LayoutState, id: number, width: number) => void
+  updateRightbarWidth: (draft: LayoutState, id: number, width: number) => void
+  releaseRightbarWidth: (draft: LayoutState, id?: number) => void
   openRightbar: (draft: LayoutState, track: boolean, fullscreen: boolean) => void
   closeRightbar: (draft: LayoutState) => void
 }
@@ -84,6 +89,7 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         viewportWidth: window.innerWidth,
         narrowExpanded: false,
         rightbar: null,
+        rightbarWidthRequest: null,
         rightbarShown: false,
         rightbarTrack: false,
         rightbarFullscreen: false,
@@ -122,7 +128,19 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       },
       setRightbar: (d, px: number) => {
         d.layoutInfo.rightbarInstant = false
+        d.layoutInfo.rightbarWidthRequest = null
         d.layoutInfo.rightbar = clampWidth(px, RIGHTBAR_MIN, Math.max(RIGHTBAR_MIN, d.layoutInfo.viewportWidth * RIGHTBAR_MAX_RATIO))
+      },
+      requestRightbarWidth: (d, id: number, width: number) => {
+        d.layoutInfo.rightbarWidthRequest = { id, width }
+      },
+      updateRightbarWidth: (d, id: number, width: number) => {
+        if (d.layoutInfo.rightbarWidthRequest?.id !== id) return
+        if (!Number.isFinite(width)) throw new RangeError('layout.requestRightbarWidth.update: width must be finite')
+        d.layoutInfo.rightbarWidthRequest.width = width
+      },
+      releaseRightbarWidth: (d, id?: number) => {
+        if (id === undefined || d.layoutInfo.rightbarWidthRequest?.id === id) d.layoutInfo.rightbarWidthRequest = null
       },
       openRightbar: (d, track: boolean, fullscreen: boolean) => {
         if (!d.layoutInfo.rightbarShown || d.layoutInfo.rightbarTrack !== track || d.layoutInfo.rightbarFullscreen !== fullscreen) {

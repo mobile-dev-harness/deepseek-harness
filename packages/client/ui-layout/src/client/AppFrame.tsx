@@ -162,7 +162,8 @@ export function AppFrame({
   const sidebarPreference = sidebarCollapsed
     ? 0
     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
-  const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
+  const rightbarPreference = Math.max(RIGHTBAR_MIN,
+    layoutInfo.rightbarWidthRequest?.width ?? layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO)
   // Desktop reopen controls occupy the frame's shell.leading seat (macOS) or
   // the Windows caption row; neither platform keeps an icon rail.
   const darwin = document.documentElement.dataset.platform === 'darwin'

@@ -167,7 +167,11 @@ export interface SidebarRightTabInfo {
     /** Presentation selected by manual mode or viewport width; preserved while collapsed. */
     readonly fullscreen: boolean
   }
-  readonly panel: { readonly id: PaneId }
+  readonly panel: {
+    readonly id: PaneId
+    /** This pane is docked and no other docked pane shares the right panel. */
+    readonly isSoleDockedPane: boolean
+  }
   readonly tab: TabRecord & {
     /** Effective refresh binding for this page's controls. */
     readonly refreshShortcut?: ShortcutCatalogEntry | undefined

@@ -65,7 +65,7 @@ function tabInfo(params: unknown, revision = 1): SidebarRightTabInfo {
   }
   return {
     sidebar: { expanded: true, fullscreen: false },
-    panel: { id: 'pane-1' as PaneId },
+    panel: { id: 'pane-1' as PaneId, isSoleDockedPane: true },
     tab: {
       ...TAB,
       title: '',
