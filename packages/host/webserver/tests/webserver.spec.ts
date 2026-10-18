@@ -402,6 +402,44 @@ describe('real Loader composition', () => {
       .headers.get('content-encoding')).toBeNull()
   })
 
+  it('delivers each gzip-compressed write before the handler writes the next one', { timeout: 60_000 }, async () => {
+    const server = (await loadComposition(0, true)).webServer
+    const first = 'first streamed write '.repeat(8)
+    let releaseSecond!: () => void
+    const firstDecoded = new Promise<void>((resolve) => { releaseSecond = resolve })
+    server.register({
+      kind: 'exact',
+      path: '/live',
+      handler: async (_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/octet-stream' })
+        res.write(first)
+        // The second write exists only after the client has decoded the first.
+        await firstDecoded
+        res.end('second')
+      },
+    })
+    let timer: NodeJS.Timeout | undefined
+    const stalled = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => { reject(new Error('the first write was held by response compression')) }, 5_000)
+    })
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(boundPort(server.port))}/live`, { headers: { 'accept-encoding': 'gzip' } })
+      expect(response.headers.get('content-encoding')).toBe('gzip')
+      const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader()
+      let text = ''
+      for (;;) {
+        if (text.length >= first.length) releaseSecond()
+        const { done, value } = await Promise.race([reader.read(), stalled])
+        if (done) break
+        text += value
+      }
+      expect(text).toBe(first + 'second')
+    } finally {
+      clearTimeout(timer)
+      releaseSecond()
+    }
+  })
+
   // Real-Loader composition resolves workspace packages through tsx at test
   // time; first resolution after the host/client program split is slow enough
   // to trip the default 5s budget on cold caches.

@@ -14,6 +14,7 @@ import { createServer as createSecureServer } from 'node:https'
 import { isIP, type AddressInfo } from 'node:net'
 import { resolve } from 'node:path'
 import type { Duplex } from 'node:stream'
+import { constants as zlibConstants } from 'node:zlib'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import compressionMiddleware from 'compression'
@@ -221,6 +222,9 @@ function createGzipMiddleware(config: ResolvedConfig): NodeMiddleware {
   const middleware = compressionMiddleware({
     level: config.compressionLevel,
     threshold: config.compressionThresholdBytes,
+    // Without a per-write flush, zlib holds a streamed body until its buffers
+    // fill; a sync flush keeps the deflate dictionary across writes.
+    flush: zlibConstants.Z_SYNC_FLUSH,
     filter(request, response) {
       if (response.getHeader('content-range') !== undefined) return false
       const contentType = response.getHeader('content-type')

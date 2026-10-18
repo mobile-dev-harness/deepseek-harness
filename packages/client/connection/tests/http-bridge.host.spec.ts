@@ -1,10 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
-import { request } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createGunzip } from 'node:zlib'
 import { Context } from '@deepseek-ai/cordis'
-import WebServer from '@deepseek-ai/dsh-host-webserver'
 import { describe, expect, it } from 'vitest'
 import { bridge } from '../src/http-bridge.ts'
 import { Peer } from '../src/peer.ts'
@@ -217,59 +214,5 @@ describe('HTTP bridge abort', () => {
     expect(status).toBe(415)
     expect(headers).toMatchObject({ connection: 'close' })
     expect(destroyed).toEqual([true])
-  })
-})
-
-describe('HTTP bridge streaming', () => {
-  it('delivers each gzip-compressed chunk before the handler produces the next one', { timeout: 30_000 }, async () => {
-    const ctx = new Context()
-    const first = new Uint8Array(2048).fill(1)
-    const second = new Uint8Array(2048).fill(2)
-    let releaseSecond!: () => void
-    const firstDecoded = new Promise<void>((resolve) => { releaseSecond = resolve })
-    let timer: NodeJS.Timeout | undefined
-    try {
-      await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0, compression: 'gzip' })
-      ctx.webServer.register({ kind: 'prefix', path: '/api', handler: (req, res) => bridge(req, res, {
-        requestBodyMode: () => 'buffered',
-        fetch: async () => new Response(new ReadableStream<Uint8Array>({
-          async start(controller) {
-            controller.enqueue(first)
-            // The second chunk exists only after the client has decoded the first.
-            await firstDecoded
-            controller.enqueue(second)
-            controller.close()
-          },
-        }), { headers: { 'content-type': 'application/octet-stream' } }),
-      }, PEER) })
-      const received = new Promise<{ encoding: string | undefined; body: Buffer }>((resolve, reject) => {
-        const outgoing = request(new URL('/api/stream', `http://127.0.0.1:${ctx.webServer.port}`), {
-          method: 'POST', headers: { 'accept-encoding': 'gzip', 'content-type': 'application/json' },
-        }, (response) => {
-          const chunks: Buffer[] = []
-          let length = 0
-          response.pipe(createGunzip())
-            .on('data', (chunk: Buffer) => {
-              chunks.push(chunk)
-              length += chunk.length
-              if (length >= first.length) releaseSecond()
-            })
-            .on('end', () => { resolve({ encoding: response.headers['content-encoding'], body: Buffer.concat(chunks) }) })
-            .on('error', reject)
-        })
-        outgoing.once('error', reject)
-        outgoing.end('{}')
-      })
-      const stalled = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => { reject(new Error('the first chunk was held by response compression')) }, 5_000)
-      })
-      const { encoding, body } = await Promise.race([received, stalled])
-      expect(encoding).toBe('gzip')
-      expect(body).toEqual(Buffer.concat([first, second]))
-    } finally {
-      clearTimeout(timer)
-      releaseSecond()
-      await ctx.fiber.dispose()
-    }
   })
 })
